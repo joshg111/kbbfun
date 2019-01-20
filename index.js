@@ -4,6 +4,8 @@ var assert = require('assert');
 var cheerio = require('cheerio'); // Basically jQuery for node.js
 var rp = require('request-promise');
 const pConfig = require("./config/public-config");
+var fs = require('fs');
+
 
 const OPTIONS = pConfig.rp.OPTIONS;
 const OPTIONS_BASIC = pConfig.rp.OPTIONS_BASIC;
@@ -81,7 +83,9 @@ async function getKbbStyles(year, make, model, retry=true) {
       make.name.toLowerCase().replace(/ /gi, '-') +
       '/' + model.name.toLowerCase().replace(/ /gi, '-')
         .replace(/[\(|\)]/g, '')
-        .replace(/&/g, '') +
+        .replace(/&/g, '')
+        .replace(/\./g, '')
+        .replace(/\//g, '-') +
       '/' + year + '/styles/?intent=buy-used';
 
     var rsp = await rp({...OPTIONS_BASIC, resolveWithFullResponse: true, uri: link});
@@ -157,63 +161,43 @@ async function getKbbStyles(year, make, model, retry=true) {
 
 
 async function driver() {
-
+  var stream = fs.createWriteStream("cars.txt", {flags:'a'});
   // DRIVER
   const api = await getApi();
-  const MIN_YEAR = 1992;
-  const MAX_YEAR = 2019;
 
-  // 12/30/18 - Adding a single year to the array for testing purposes.
-  var years = [2018];
-  var res = {};
-
-  // 12/30/18 - Comment out for testing purposes.
-  // for (year = MIN_YEAR; year <= MAX_YEAR; year++) {
-  //   years.push(year);
-  // }
-
-  // await Promise.all(years.map(async (year) => {
-  for (year = MIN_YEAR; year <= MAX_YEAR; year++) {
-    // 12/30/18 - Comment out for testing purposes.
+  for (let year = 2016; year <= 2019; year++) {
+    var res = [];
     var makes = await getKbbMakesAndIds(year, api);
-    // var makes = [{"id":49,"name":"Toyota"}];
 
-    // await Promise.all(makes.map(async (make) => {
     for (let make of makes) {
       var key = year + "." + make.name;
-      res[key] = [];
+      var entry = {};
+      entry[key] = [];
       var models = await getKbbModels(year, make, api);
 
-      // Make getKbbStyles synchronous to ease resources.
       for (let model of models) {
         var styles = await getKbbStyles(year, make, model);
 
-        styles.map((style) => {
-          res[key].push({model: model.name, styleText: style.text, href: style.href});
-        });
+        await Promise.all(styles.map(async (style) => {
+          await setTimeoutPromise(1000);
+          entry[key].push({model: model.name, styleText: style.text, href: style.href});
+        }));
       }
 
-      // models.map((model) => {
-      //   var styles = await getKbbStyles(year, make, model);
-      //
-      //   styles.map((style) => {
-      //     res[key].push({model: model.name, styleText: style.text, href: style.href});
-      //   });
-      // });
+      var entryStr = JSON.stringify(entry);
+      res.push(entryStr)
     }
+
+    for (let car of res) {
+      stream.write( car + "\n");
+    }
+    console.log("wrote year: ", year);
   }
 
-  return res;
+  stream.end();
 }
 
-driver().then((cars) => {
-  console.log(cars);
-  // console.log("done");
-})
+driver().then(() => {
+  console.log("success");
+});
 
-// https://www.kbb.com/Api/3.9.269.0/67873/vehicle/v1/Makes?vehicleClass=UsedCar
-// https://www.kbb.com/Api/3.9.269.0/67873/vehicle/v1/Models?makeid=49&vehicleClass=UsedCar
-
-// https://www.kbb.com/Api/3.9.269.0/67873/vehicle/v1/Styles?makeid=49modelid=290&vehicleClass=UsedCar
-// https://www.kbb.com/toyota/camry/2014/styles/?intent=buy-used
-// https://www.kbb.com/vehicles/path/_classifiedsentry/?yearid=2014&modelid=286&intent=buy-used&vehicleid=0

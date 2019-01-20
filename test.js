@@ -1,5 +1,6 @@
 const util = require('util');
 const setTimeoutPromise = util.promisify(setTimeout);
+var fs = require('fs');
 
 
 function getRandomInt(max) {
@@ -75,8 +76,20 @@ async function driver() {
 // console.log("here");
 
 
-[1,2,3].map((num) => {
-  [1,2,3].map((a) => {
-    console.log(num);
-  })
-})
+// [1,2,3].map((num) => {
+//   [1,2,3].map((a) => {
+//     console.log(num);
+//   })
+// })
+
+// var stream = fs.createWriteStream("cars.txt", {flags:'a'});
+// stream.write("hi\n");
+// stream.end();
+
+var {hgetAsync, redisClient} = require('./redis-client');
+
+redisClient.on("ready", async function () {
+  var res = await hgetAsync('kbbMakes', '2019');
+  console.log(res);
+});
+
