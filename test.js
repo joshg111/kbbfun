@@ -89,7 +89,7 @@ async function driver() {
 var {hgetAsync, redisClient} = require('./redis-client');
 
 redisClient.on("ready", async function () {
-  var res = await hgetAsync('kbbMakes', '2019');
+  var res = await hgetAsync('kbbCarData', '2008.bmw');
   console.log(res);
 });
 

@@ -1,7 +1,7 @@
 var {hsetAsync, redisClient} = require('./redis-client');
 
 var lineReader = require('readline').createInterface({
-    input: require('fs').createReadStream('cars.txt')
+    input: require('fs').createReadStream('empty-styles/newCars.txt')
 });
 
 var waitRedis = [];
