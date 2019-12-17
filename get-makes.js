@@ -5,45 +5,46 @@ var fs = require('fs');
 
 const OPTIONS_BASIC = pConfig.rp.OPTIONS_BASIC;
 
-async function getKbbMakesAndIds(year, api) {
-    var link = 'https://www.kbb.com/Api/'+ api.api + '/' + api.version + '/vehicle/v1/Makes?vehicleClass=UsedCar&yearid=' + year;
-
-    var body = await rp({...OPTIONS_BASIC, uri: link});
-    var makes = JSON.parse(body);
+async function getKbbMakesAndIds(year) {
+    console.log("getKbbMakesAndIds");
+    var link = 'https://www.kbb.com/vehicleapp/api/'
+  
+    var payload = {
+      "operationName":"MAKES_QUERY",
+      "variables":{
+        "vehicleClass":"usedcar",
+        "vehicleType":"used",
+        "year": year
+      },
+      "extensions":{
+        "persistedQuery":{
+          "version":1,
+          "sha256Hash":"5e9f49f68dfa81f9251ddd7a1a958bebb65ea982a34b7860cf47f47043f1901f"
+        }
+      }
+    };
+  
+    try {
+      var body = await rp({...OPTIONS_BASIC, uri: link, method: 'POST', 
+        body: payload,
+        json: true
+      });
+    } catch(err) {
+      console.log(err);
+    }
+    var makes = body.data.makes;
     assert(makes);
     assert(makes.length > 0);
     return makes;
-}
+  }
 
-async function getApi() {
-    var link = 'https://www.kbb.com/used-cars/';
-
-    var api = null;
-    var version = null;
-
-    try {
-        var body = await rp({...OPTIONS_BASIC, uri: link});
-
-        api = /var assemblyVersion = "(.+)"/g.exec(body)[1];
-        version = /var dataVersionId = "(.+)"/g.exec(body)[1];
-    }
-    catch(err) {
-        console.log("getApi err = ", err);
-        throw new Error(err);
-    }
-
-    assert(api);
-    assert(version);
-    return ({api, version});
-}
 
 async function driver() {
     var res = [];
-    const api = await getApi();
     var stream = fs.createWriteStream("makes.txt", {flags:'a'});
 
-    for (let year = 1992; year <= 2019; year++) {
-        var makes = await getKbbMakesAndIds(year, api);
+    for (let year = 2019; year <= 2020; year++) {
+        var makes = await getKbbMakesAndIds(year);
         var entry = {};
         entry[year] = makes;
         res.push(JSON.stringify(entry));

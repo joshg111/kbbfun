@@ -5,51 +5,73 @@ var cheerio = require('cheerio'); // Basically jQuery for node.js
 var rp = require('request-promise');
 const pConfig = require("./config/public-config");
 var fs = require('fs');
+var getEmptyStyle = require('./empty-styles/getStyle');
 
 
 const OPTIONS = pConfig.rp.OPTIONS;
 const OPTIONS_BASIC = pConfig.rp.OPTIONS_BASIC;
 
+async function getKbbMakesAndIds(year) {
+  console.log("getKbbMakesAndIds");
+  var link = 'https://www.kbb.com/vehicleapp/api/'
 
-async function getApi() {
-  var link = 'https://www.kbb.com/used-cars/';
-
-  var api = null;
-  var version = null;
+  var payload = {
+    "operationName":"MAKES_QUERY",
+    "variables":{
+      "vehicleClass":"usedcar",
+      "vehicleType":"used",
+      "year": year
+    },
+    "extensions":{
+      "persistedQuery":{
+        "version":1,
+        "sha256Hash":"5e9f49f68dfa81f9251ddd7a1a958bebb65ea982a34b7860cf47f47043f1901f"
+      }
+    }
+  };
 
   try {
-    var body = await rp({...OPTIONS_BASIC, uri: link});
-
-    api = /var assemblyVersion = "(.+)"/g.exec(body)[1];
-    version = /var dataVersionId = "(.+)"/g.exec(body)[1];
+    var body = await rp({...OPTIONS_BASIC, uri: link, method: 'POST', 
+      body: payload,
+      json: true
+    });
+  } catch(err) {
+    console.log(err);
   }
-  catch(err) {
-    console.log("getApi err = ", err);
-    throw new Error(err);
-  }
-
-  assert(api);
-  assert(version);
-  return ({api, version});
-}
-
-async function getKbbMakesAndIds(year, api) {
-  var link = 'https://www.kbb.com/Api/'+ api.api + '/' + api.version + '/vehicle/v1/Makes?vehicleClass=UsedCar&yearid=' + year;
-
-  var body = await rp({...OPTIONS_BASIC, uri: link});
-  var makes = JSON.parse(body);
+  var makes = body.data.makes;
   assert(makes);
   assert(makes.length > 0);
   return makes;
 }
 
-async function getKbbModels(year, make, api) {
+async function getKbbModels(year, make) {
   console.log("getting models");
 
-  var link = 'https://www.kbb.com/Api/'+ api.api + '/' + api.version + '/vehicle/v1/Models?makeid=' + make.id + '&vehicleClass=UsedCar&yearid=' + year;
+  var link = 'https://www.kbb.com/vehicleapp/api/'
 
-  var body = await rp({...OPTIONS_BASIC, uri: link});
-  var models = JSON.parse(body);
+  var payload = {
+    "operationName":"MODELS_QUERY",
+    "variables":{
+      "vehicleClass":"usedcar",
+      "vehicleType":"used",
+      "year": year,
+      "make": make.id
+    },
+    "extensions":{
+      "persistedQuery":{
+        "version":1,
+        "sha256Hash":"2e7f89c39a5e92eecfe7c82bc4fb797c718952bb33b070be36d6d9be68eab163"
+      }
+    }
+  };
+
+  var body = await rp({...OPTIONS_BASIC, uri: link, method: 'POST',
+    body: payload,
+    json: true
+  });
+  
+  var models = body.data.models;
+  
   assert(models);
   assert(models.length > 0);
 
@@ -107,6 +129,11 @@ async function getKbbStyles(year, make, model, retry=true) {
       styleHref = 'https://www.kbb.com' + styleHref + '&pricetype=private-party&condition=good';
       styleHref = styleHref.replace(/&mileage=\d*/g, "");
       style.href = styleHref;
+      if (style.text === "") {
+        var newStyleText = await getEmptyStyle(style.href)
+        style.text = newStyleText;
+        console.log("Found empty style = ", style.href);
+      }
     }
   }
   catch(err) {
@@ -120,60 +147,19 @@ async function getKbbStyles(year, make, model, retry=true) {
   return styles;
 }
 
-
-// async function driver() {
-//
-//   // DRIVER
-//   const api = await getApi();
-//   const MIN_YEAR = 1992;
-//   const MAX_YEAR = 2019;
-//   var makesPerYearArr = [];
-//
-//   for (year = MIN_YEAR; year <= MAX_YEAR; year++) {
-//     makesPerYearArr.push({year, makes: getKbbMakesAndIds(year, api)});
-//     makes = getKbbMakesAndIds(year, api);
-//
-//   }
-//
-//   await Promise.all(makesPerYearArr.map(async (makesPerYearPromise) => {
-//     var models = [];
-//     var makesPerYear = await makesPerYearPromise;
-//     var year = makesPerYear.year;
-//
-//     for (make of makesPerYear.makes) {
-//       models.push({make, models: getKbbModels(year, make, api)});
-//     }
-//
-//     var styles = [];
-//     await Promise.all(models.map(async (modelPromise) => {
-//       var data = await modelPromise;
-//       styles.push({make: data.make, model: data.model, getKbbStyles(year, data.make, data.model)});
-//     }));
-//
-//     await Promise.all(styles.map(async (stylePromise) => {
-//       var style = await stylePromise;
-//
-//
-//     }));
-//   }));
-// }
-
-
-
 async function driver() {
-  var stream = fs.createWriteStream("cars.txt", {flags:'a'});
+  var stream = fs.createWriteStream("testWithEmptyStyles.txt", {flags:'a'});
   // DRIVER
-  const api = await getApi();
 
-  for (let year = 2016; year <= 2019; year++) {
+  for (let year = 2020; year <= 2020; year++) {
     var res = [];
-    var makes = await getKbbMakesAndIds(year, api);
+    var makes = await getKbbMakesAndIds(year);
 
     for (let make of makes) {
       var key = year + "." + make.name;
       var entry = {};
       entry[key] = [];
-      var models = await getKbbModels(year, make, api);
+      var models = await getKbbModels(year, make);
 
       for (let model of models) {
         var styles = await getKbbStyles(year, make, model);
@@ -201,3 +187,4 @@ driver().then(() => {
   console.log("success");
 });
 
+module.exports = {getKbbMakesAndIds};
